@@ -1,0 +1,976 @@
+---
+title: "Praca zaliczeniowa 1."
+output: html_notebook
+author: "Michal Ozieblo"
+---
+
+```{r message=FALSE}
+# LIBRARIES IMPORT
+
+# to do: library::function()
+
+library(rsample)
+library(dplyr)
+library(tidyverse)
+library(MASS)
+library(GGally)
+library(textreadr)
+library(plotROC)
+library(pROC)
+library(quantmod)
+library(DT)
+```
+
+DATASET DECRIPTION:
+```{r message=FALSE}
+dataset_description <- read_document("/Users/michalozieblo/Downloads/Description.docx")
+dataset_description
+
+# the last column has values for the estimation
+# 1 = Good
+# 2 = Bad
+```
+
+Ex 1. Set the seed value f.ex. 12345
+```{r message=FALSE}
+set.seed(12345)
+```
+
+Ex 2. Load the data. Check for empty values and change values from the last column from {1,2} to {0,1}
+```{r message=FALSE}
+dataset <- read.table("/Users/michalozieblo/Downloads/german.data-numeric")
+```
+
+```{r message=FALSE}
+summary(dataset)
+```
+
+check for N/A values:
+```{r message=FALSE}
+sum(is.na(dataset)) # score 0 mean no N/A values
+```
+
+change values from the last column from {1,2} to {0,1}:
+```{r message=FALSE}
+dataset$V25[dataset$V25 == 1] <- 0
+dataset$V25[dataset$V25 == 2] <- 1
+```
+
+Ex 3. Do a random split ot the dataset for subsets: learning, validation and test, in proportions of 40|30|30:
+```{r message=FALSE}
+split1 <- initial_split(dataset, prop=0.7)
+training_set <- training(split1)
+zbior_testowy <- testing(split1) #test_subset
+
+split2 <- initial_split(training_set, prop=(4/7))
+zbior_uczacy <- training(split2) #learning_subset
+zbior_walidacyjny <- testing(split2) #validation_subset
+```
+
+Ex 4. Create two different models using GLM:
+```{r message=FALSE}
+#glm.fit <- glm(V25 ~ ., data=zbior_uczacy, family=binomial)
+#summary(glm.fit)
+
+#glm.fit2 <- glm(V25 ~ V1 + V2 + V3 + V5 + V12 + V16 + V17 + V18, data=zbior_uczacy, family=binomial)
+#summary(glm.fit2)
+
+glm.fit3 <- glm(V25 ~ V1 + V2 + V3 + V5 + V12 + V16 + V18, data=zbior_uczacy, family=binomial)
+```
+
+```{r message=FALSE}
+summary(glm.fit3)
+
+#glm.fit4 <- glm(V25 ~ V1 + V2 + V3 + V5 + V12 + V16, data=zbior_uczacy, family=binomial)
+#summary(glm.fit4)
+```
+
+#NOTES:
+- glm.fit3 is best at the moment
+- criteria method: subjective backward elimination/attribute selection, based on p-value
+
+QUESTION: are imbalanced data in V25? ...
+```{r message=FALSE}
+summary(zbior_uczacy$V25)
+length(zbior_uczacy$V25[zbior_uczacy$V25 == 0])
+length(zbior_uczacy$V25[zbior_uczacy$V25 == 1])
+```
+
+... YES: 281 values of 0 and 119 values of 1
+```{r message=FALSE}
+# selection of balanced subset from the learning set:
+
+# dplyr:: necessary, otherwise library masking
+zbior_uczacy_balanced0 <- dplyr::select(filter(zbior_uczacy,V25 == 0), c(V1,V2,V3,V5,V12,V16,V18,V25)) 
+zbior_uczacy_balanced1 <- dplyr::select(filter(zbior_uczacy,V25 == 1), c(V1,V2,V3,V5,V12,V16,V18,V25))
+zbior_uczacy_balanced0 <- zbior_uczacy_balanced0[1:119,]
+zbior_uczacy_balanced <- bind_rows(zbior_uczacy_balanced0,zbior_uczacy_balanced1) # BALANCED TRAINING SUBSET
+```
+
+```{r message=FALSE}
+glm.fit3.balanced <- glm(V25 ~ V1 + V2 + V3 + V5 + V12 + V16 + V18, data=zbior_uczacy_balanced, family=binomial)
+```
+
+```{r message=FALSE}
+summary(glm.fit3.balanced)
+```
+
+#NOTES:
+- V12 and V18 with p>0.1
+- different findings for p-values, so...
+```{r message=FALSE}
+#glm.fit5.balanced <- glm(V25 ~ ., data=zbior_uczacy_full_balanced, family=binomial)
+#summary(glm.fit5.balanced)
+
+#glm.fit6.balanced <- glm(V25 ~ V1+V2+V3+V5+V17+V18, data=zbior_uczacy_full_balanced, family=binomial)
+#summary(glm.fit6.balanced)
+
+glm.fit7.balanced <- glm(V25 ~ V1+V2+V3+V5, data=zbior_uczacy_balanced, family=binomial)
+```
+
+```{r message=FALSE}
+summary(glm.fit7.balanced)
+```
+
+#NOTES:
+- glm.fit7.balanced best at the moment
+
+Ex 5. Do the ROC and calculate AUC value based on the prediction on VALIDATION subset:
+```{r message=FALSE}
+glm.fit7.balanced.prediction <- predict(glm.fit7.balanced, zbior_walidacyjny, type="response")
+decyzja <- ifelse(glm.fit7.balanced.prediction > 0.5, 1, 0)
+glm.fit7.balanced.prediction_TABLE_VALID <- table(pred=decyzja, real=zbior_walidacyjny$V25)
+glm.fit7.balanced.prediction_MEAN_VALID <- mean(decyzja==zbior_walidacyjny$V25)
+```
+
+```{r message=FALSE}
+glm.fit3.prediction <- predict(glm.fit3, zbior_walidacyjny, type="response")
+decyzja <- ifelse(glm.fit3.prediction > 0.5, 1, 0)
+glm.fit3.prediction_TABLE_VALID <- table(pred=decyzja, real=zbior_walidacyjny$V25)
+glm.fit3.prediction_MEAN_VALID <- mean(decyzja==zbior_walidacyjny$V25)
+```
+
+```{r message=FALSE}
+glm.fit3.balanced.prediction <- predict(glm.fit3.balanced, zbior_walidacyjny, type="response")
+decyzja <- ifelse(glm.fit3.balanced.prediction > 0.5, 1, 0)
+glm.fit3.balanced.prediction_TABLE_VALID <- table(pred=decyzja, real=zbior_walidacyjny$V25)
+glm.fit3.balanced.prediction_MEAN_VALID <- mean(decyzja==zbior_walidacyjny$V25)
+```
+
+```{r message=FALSE}
+rocplot <- ggplot(zbior_walidacyjny, aes(m = glm.fit7.balanced.prediction, d = zbior_walidacyjny$V25))+ geom_roc(n.cuts=20,labels=FALSE)
+rocplot + style_roc(theme = theme_grey) + geom_rocci(fill="pink") + ggtitle("ROC glm.fit7.balanced.prediction")
+```
+
+```{r message=FALSE}
+# 1
+pROC_obj <- roc(zbior_walidacyjny$V25,glm.fit3.prediction,
+                smoothed = TRUE,
+                # arguments for ci
+                ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+                # arguments for plot
+                plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,print.auc=TRUE, show.thres=TRUE, main="ROC glm.fit3.prediction", sub="VALIDATION subset")
+
+sens.ci <- ci.se(pROC_obj)
+plot(sens.ci, type="shape", col="lightblue")
+plot(sens.ci, type="bars")
+
+# 3
+pROC_obj <- roc(zbior_walidacyjny$V25,glm.fit3.balanced.prediction,
+                smoothed = TRUE,
+                # arguments for ci
+                ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+                # arguments for plot
+                plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,print.auc=TRUE, show.thres=TRUE, main="ROC glm.fit3.balanced.prediction", sub="VALIDATION subset")
+
+sens.ci <- ci.se(pROC_obj)
+plot(sens.ci, type="shape", col="lightblue")
+plot(sens.ci, type="bars")
+
+#3
+pROC_obj <- roc(zbior_walidacyjny$V25,glm.fit7.balanced.prediction,
+                smoothed = TRUE,
+                # arguments for ci
+                ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+                # arguments for plot
+                plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,print.auc=TRUE, show.thres=TRUE, main="ROC glm.fit7.balanced.prediction", sub="VALIDATION subset")
+
+sens.ci <- ci.se(pROC_obj)
+plot(sens.ci, type="shape", col="lightblue")
+plot(sens.ci, type="bars")
+```
+
+Ex 6. Do the ROC and calculate AUC value based on the prediction on TEST subset:
+```{r message=FALSE}
+zbior_treningowy_full_balanced0 <- dplyr::select(filter(training_set,V25 == 0),c(V1,V2,V3,V5,V12,V16,V18,V25))
+zbior_treningowy_full_balanced1 <- dplyr::select(filter(training_set,V25 == 1),c(V1,V2,V3,V5,V12,V16,V18,V25))
+# 493:207 rows
+
+zbior_treningowy_full_balanced0 <- zbior_treningowy_full_balanced0[1:207,]
+
+# pelen training subset, ale zbalansowany dla V25
+zbior_treningowy_full_balanced <- bind_rows(zbior_treningowy_full_balanced0,zbior_treningowy_full_balanced1)
+```
+
+```{r message=FALSE}
+glm.fit8.balanced <- glm(V25 ~ V1+V2+V3+V5, data=zbior_treningowy_full_balanced, family=binomial)
+```
+
+```{r message=FALSE}
+summary(glm.fit8.balanced)
+```
+
+```{r message=FALSE}
+glm.fit8.balanced.prediction <- predict(glm.fit8.balanced, zbior_testowy, type="response")
+decyzja <- ifelse(glm.fit8.balanced.prediction > 0.5, 1, 0)
+glm.fit8.balanced.prediction_TABLE_TEST <- table(pred=decyzja, real=zbior_testowy$V25)
+glm.fit8.balanced.prediction_MEAN_TEST <- mean(decyzja==zbior_testowy$V25)
+```
+
+```{r message=FALSE}
+glm.fit7.balanced.prediction_test <- predict(glm.fit7.balanced, zbior_testowy, type="response")
+decyzja <- ifelse(glm.fit7.balanced.prediction_test > 0.5, 1, 0)
+glm.fit7.balanced.prediction_test_TABLE_TEST <- table(pred=decyzja, real=zbior_testowy$V25)
+glm.fit7.balanced.prediction_test_MEAN_TEST <- mean(decyzja==zbior_testowy$V25)
+```
+
+```{r message=FALSE}
+glm.fit3.prediction_TEST <- predict(glm.fit3, zbior_testowy, type="response")
+decyzja <- ifelse(glm.fit3.prediction_TEST > 0.5, 1, 0)
+glm.fit3.prediction_TABLE_TEST <- table(pred=decyzja, real=zbior_testowy$V25)
+glm.fit3.prediction_MEAN_TEST <- mean(decyzja==zbior_testowy$V25)
+```
+
+```{r message=FALSE}
+glm.fit3.balanced.prediction_TEST <- predict(glm.fit3.balanced, zbior_testowy, type="response")
+decyzja <- ifelse(glm.fit3.balanced.prediction_TEST > 0.5, 1, 0)
+glm.fit3.balanced.prediction_TABLE_TEST <- table(pred=decyzja, real=zbior_testowy$V25)
+glm.fit3.balanced.prediction_MEAN_TEST <- mean(decyzja==zbior_testowy$V25)
+```
+
+```{r message=FALSE}
+glm.fit3_TRAINING_SUBSET <- glm(V25 ~ V1 + V2 + V3 + V5 + V12 + V16 + V18, data=training_set, family=binomial)
+```
+
+```{r message=FALSE}
+summary(glm.fit3_TRAINING_SUBSET)
+```
+
+```{r message=FALSE}
+glm.fit3.balanced_TRAINING_BALANCED_SUBSET <- glm(V25 ~ V1 + V2 + V3 + V5 + V12 + V16 + V18, data=zbior_treningowy_full_balanced, family=binomial)
+```
+
+```{r message=FALSE}
+summary(glm.fit3.balanced_TRAINING_BALANCED_SUBSET)
+```
+
+```{r message=FALSE}
+glm.fit3_TRAINING_SUBSET.prediction_TEST <- predict(glm.fit3_TRAINING_SUBSET, zbior_testowy, type="response")
+decyzja <- ifelse(glm.fit3_TRAINING_SUBSET.prediction_TEST > 0.5, 1, 0)
+glm.fit3_TRAINING_SUBSET.prediction_TABLE_TEST <- table(pred=decyzja, real=zbior_testowy$V25)
+glm.fit3_TRAINING_SUBSET.prediction_MEAN_TEST <- mean(decyzja==zbior_testowy$V25)
+
+glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_TEST <- predict(glm.fit3.balanced_TRAINING_BALANCED_SUBSET, zbior_testowy, type="response")
+decyzja <- ifelse(glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_TEST > 0.5, 1, 0)
+glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_TABLE_TEST <- table(pred=decyzja, real=zbior_testowy$V25)
+glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_MEAN_TEST <- mean(decyzja==zbior_testowy$V25)
+```
+
+# DUMMY
+```{r}
+dummy_fit <- glm(training_set$V25 ~ ., data=training_set, family=binomial)
+dummy_predict <- predict(dummy_fit, zbior_testowy, type="response")
+
+tab_dummy <- table(pred=decyzja, real=zbior_testowy$V25)
+mean_50_dummy <- mean(decyzja==zbior_testowy$V25)
+
+pROC_obj <- roc(zbior_testowy$V25, dummy_predict,
+                smoothed = TRUE,
+                ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+                plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,print.auc=TRUE, show.thres=TRUE, main="ROC dummy_predict", sub="TEST subset")
+
+sens.ci <- ci.se(pROC_obj)
+plot(sens.ci, type="shape", col="lightblue")
+plot(sens.ci, type="bars")
+
+###########
+
+FN_list_dummy <- c()
+FP_list_dummy <- c()
+mean_list_dummy <- c()
+
+for(i in poziom_progu_odciecia){
+  
+  pred_dummy <- ifelse(dummy_predict > i, 1, 0)
+
+  tabela_dummy <- table(pred_dummy, real=zbior_testowy$V25)
+
+  FN_dummy <- c(tabela_dummy[1,2])
+  FP_dummy <- c(tabela_dummy[2,1])
+  wynik_dummy <- c(mean(pred_dummy==zbior_testowy$V25))
+
+  FN_list_dummy <- c(FN_list_dummy, FN_dummy)
+  FP_list_dummy <- c(FP_list_dummy, FP_dummy)
+  mean_list_dummy <- c(mean_list_dummy,wynik_dummy)
+}
+
+koszt_FP_dummy <- c()
+for(i in FP_list_dummy){koszt_FP_dummy <- c(koszt_FP_dummy, i * 150)}
+
+koszt_FN_dummy <- c()
+for(i in FN_list_dummy){koszt_FN_dummy <- c(koszt_FN_dummy, i * 1000)}
+
+suma_koszt_dummy <- c()
+for(i in seq_along(koszt_FN_dummy)){suma_koszt_dummy <- c(suma_koszt_dummy, (koszt_FP_dummy[i]+koszt_FN_dummy[i]))}
+
+plot(poziom_progu_odciecia,mean_list_dummy, type='l', col = "black", main="MSE curve", xlab="THRESHOLD", ylab="ERROR")
+points(x = poziom_progu_odciecia[match(max(mean_list_dummy),mean_list_dummy)], y = max(mean_list_dummy), pch = 16, col = "coral2")
+
+plot(poziom_progu_odciecia,koszt_FP_dummy, type='l', col = "green", main="FP cost", xlab="THRESHOLD", ylab="COST")
+
+plot(poziom_progu_odciecia,koszt_FN_dummy, type='l', col = "red", main="total cost (blue) + FN cost (red)", xlab="THRESHOLD", ylab="COST")
+lines(poziom_progu_odciecia,suma_koszt_dummy, type='l', col = "blue")
+points(x = poziom_progu_odciecia[match(min(suma_koszt_dummy),suma_koszt_dummy)], y = min(suma_koszt_dummy), pch = 16, col = "steelblue3")
+```
+
+```{r}
+summary(dummy_fit)
+summary(dummy_predict)
+```
+
+```{r message=FALSE}
+# SPECIFICITY = TN/(TN+FP)
+
+dummy_predict_SPECIFICITY_TEST = tab_dummy[1,1]/(tab_dummy[1,1] + tab_dummy[2,1])
+
+glm.fit3.prediction_SPECIFICITY_VALID = glm.fit3.prediction_TABLE_VALID[1,1]/(glm.fit3.prediction_TABLE_VALID[1,1] + glm.fit3.prediction_TABLE_VALID[2,1])
+glm.fit3.balanced.prediction_SPECIFICITY_VALID = glm.fit3.balanced.prediction_TABLE_VALID[1,1]/(glm.fit3.balanced.prediction_TABLE_VALID[1,1] + glm.fit3.balanced.prediction_TABLE_VALID[2,1])
+glm.fit7.balanced.prediction_SPECIFICITY_VALID = glm.fit7.balanced.prediction_TABLE_VALID[1,1]/(glm.fit7.balanced.prediction_TABLE_VALID[1,1] + glm.fit7.balanced.prediction_TABLE_VALID[2,1])
+glm.fit3.prediction_SPECIFICITY_TEST = glm.fit3.prediction_TABLE_TEST[1,1]/(glm.fit3.prediction_TABLE_TEST[1,1] + glm.fit3.prediction_TABLE_TEST[2,1])
+glm.fit3.balanced.prediction_SPECIFICITY_TEST = glm.fit3.balanced.prediction_TABLE_TEST[1,1]/(glm.fit3.balanced.prediction_TABLE_TEST[1,1] + glm.fit3.balanced.prediction_TABLE_TEST[2,1])
+glm.fit7.balanced.prediction_test_SPECIFICITY_TEST = glm.fit7.balanced.prediction_test_TABLE_TEST[1,1]/(glm.fit7.balanced.prediction_test_TABLE_TEST[1,1] + glm.fit7.balanced.prediction_test_TABLE_TEST[2,1])
+glm.fit8.balanced.prediction_SPECIFICITY_TEST = glm.fit8.balanced.prediction_TABLE_TEST[1,1]/(glm.fit8.balanced.prediction_TABLE_TEST[1,1] + glm.fit8.balanced.prediction_TABLE_TEST[2,1])
+glm.fit3_TRAINING_SUBSET.prediction_SPECIFICITY_TEST = glm.fit3_TRAINING_SUBSET.prediction_TABLE_TEST[1,1]/(glm.fit3_TRAINING_SUBSET.prediction_TABLE_TEST[1,1] + glm.fit3_TRAINING_SUBSET.prediction_TABLE_TEST[2,1])
+glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_SPECIFICITY_TEST = glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_TABLE_TEST[1,1]/(glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_TABLE_TEST[1,1] + glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_TABLE_TEST[2,1])
+
+# SENSITIVITY = TP/(TP+FN)
+
+dummy_predict_SENSITIVITY_TEST = tab_dummy[2,2]/(tab_dummy[2,2] + tab_dummy[1,2])
+
+glm.fit3.prediction_SENSITIVITY_VALID = glm.fit3.prediction_TABLE_VALID[2,2]/(glm.fit3.prediction_TABLE_VALID[2,2] + glm.fit3.prediction_TABLE_VALID[1,2])
+glm.fit3.balanced.prediction_SENSITIVITY_VALID = glm.fit3.balanced.prediction_TABLE_VALID[2,2]/(glm.fit3.balanced.prediction_TABLE_VALID[2,2] + glm.fit3.balanced.prediction_TABLE_VALID[1,2])
+glm.fit7.balanced.prediction_SENSITIVITY_VALID = glm.fit7.balanced.prediction_TABLE_VALID[2,2]/(glm.fit7.balanced.prediction_TABLE_VALID[2,2] + glm.fit7.balanced.prediction_TABLE_VALID[1,2])
+glm.fit3.prediction_SENSITIVITY_TEST = glm.fit3.prediction_TABLE_TEST[2,2]/(glm.fit3.prediction_TABLE_TEST[2,2] + glm.fit3.prediction_TABLE_TEST[1,2])
+glm.fit3.balanced.prediction_SENSITIVITY_TEST = glm.fit3.balanced.prediction_TABLE_TEST[2,2]/(glm.fit3.balanced.prediction_TABLE_TEST[2,2] + glm.fit3.balanced.prediction_TABLE_TEST[1,2])
+glm.fit7.balanced.prediction_test_SENSITIVITY_TEST = glm.fit7.balanced.prediction_test_TABLE_TEST[2,2]/(glm.fit7.balanced.prediction_test_TABLE_TEST[2,2] + glm.fit7.balanced.prediction_test_TABLE_TEST[1,2])
+glm.fit8.balanced.prediction_SENSITIVITY_TEST = glm.fit8.balanced.prediction_TABLE_TEST[2,2]/(glm.fit8.balanced.prediction_TABLE_TEST[2,2] + glm.fit8.balanced.prediction_TABLE_TEST[1,2])
+glm.fit3_TRAINING_SUBSET.prediction_SENSITIVITY_TEST = glm.fit3_TRAINING_SUBSET.prediction_TABLE_TEST[2,2]/(glm.fit3_TRAINING_SUBSET.prediction_TABLE_TEST[2,2] + glm.fit3_TRAINING_SUBSET.prediction_TABLE_TEST[1,2])
+glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_SENSITIVITY_TEST = glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_TABLE_TEST[2,2]/(glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_TABLE_TEST[2,2] + glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_TABLE_TEST[1,2])
+```
+
+```{r message=FALSE}
+dummy_predict_TEST <- c(MODEL_NAME = "dummy", 
+                  TRAINED_ON = "ZBIOR_TRENINGOWY", 
+                  TESTED_ON = "zbior_testowy",
+                  ARGS = ".",
+                  MSE = mean_50_dummy,
+                  SPEC = dummy_predict_SPECIFICITY_TEST,
+                  SENS = dummy_predict_SENSITIVITY_TEST,
+                  TRES = 0.5)
+
+glm.fit3_VAL <- c(MODEL_NAME = "glm.fit3", 
+                  TRAINED_ON = "zbior_uczacy", 
+                  TESTED_ON = "zbior_walidacyjny",
+                  ARGS = "V1 + V2 + V3 + V5 + V12 + V16 + V18",
+                  MSE = glm.fit3.prediction_MEAN_VALID,
+                  SPEC = glm.fit3.prediction_SPECIFICITY_VALID,
+                  SENS = dummy_predict_SENSITIVITY_TEST,
+                  TRES = 0.5)
+
+glm.fit3_TEST <- c(MODEL_NAME = "glm.fit3",
+                   TRAINED_ON = "zbior_uczacy", 
+                   TESTED_ON = "zbior_testowy",
+                   ARGS = "V1 + V2 + V3 + V5 + V12 + V16 + V18",
+                   MSE = glm.fit3.prediction_MEAN_TEST,
+                   SPEC = glm.fit3.prediction_SPECIFICITY_TEST,
+                   SENS = glm.fit3.prediction_SENSITIVITY_TEST,
+                   TRES = 0.5)
+
+glm.fit3_TRAINING_SUBSET_TEST <- c(MODEL_NAME = "glm.fit3_TRAINING_SUBSET",
+                                   TRAINED_ON = "ZBIOR_TRENINGOWY", 
+                                   TESTED_ON = "zbior_testowy",
+                                   ARGS = "V1 + V2 + V3 + V5 + V12 + V16 + V18",
+                                   MSE = glm.fit3_TRAINING_SUBSET.prediction_MEAN_TEST,
+                                   SPEC = glm.fit3_TRAINING_SUBSET.prediction_SPECIFICITY_TEST,
+                                   SENS = glm.fit3_TRAINING_SUBSET.prediction_SENSITIVITY_TEST,
+                                   TRES = 0.5)
+
+glm.fit3.balanced_VAL <- c(MODEL_NAME = "glm.fit3.balanced", 
+                           TRAINED_ON = "zbior_uczacy_balanced", 
+                           TESTED_ON = "zbior_walidacyjny",
+                           ARGS = "V1 + V2 + V3 + V5 + V12 + V16 + V18",
+                           MSE = glm.fit3.balanced.prediction_MEAN_VALID,
+                           SPEC = glm.fit3.balanced.prediction_SPECIFICITY_VALID,
+                           SENS = glm.fit3.balanced.prediction_SENSITIVITY_VALID,
+                           TRES = 0.5)
+
+glm.fit3.balanced_TEST <- c(MODEL_NAME = "glm.fit3.balanced", 
+                            TRAINED_ON = "zbior_uczacy_balanced", 
+                            TESTED_ON = "zbior_testowy",
+                            ARGS = "V1 + V2 + V3 + V5 + V12 + V16 + V18",
+                            MSE = glm.fit3.balanced.prediction_MEAN_TEST,
+                            SPEC = glm.fit3.balanced.prediction_SPECIFICITY_TEST,
+                            SENS = glm.fit3.balanced.prediction_SENSITIVITY_TEST,
+                            TRES = 0.5)
+
+glm.fit3.balanced_TRAINING_BALANCED_SUBSET_TEST <- c(MODEL_NAME = "glm.fit3.balanced_TRAINING_BALANCED_SUBSET",
+                                   TRAINED_ON = "ZBIOR_TRENINGOWY", 
+                                   TESTED_ON = "zbior_testowy",
+                                   ARGS = "V1 + V2 + V3 + V5 + V12 + V16 + V18",
+                                   MSE = glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_MEAN_TEST,
+                                   SPEC = glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_SPECIFICITY_TEST,
+                                   SENS = glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_SENSITIVITY_TEST,
+                                   TRES = 0.5)
+
+glm.fit7.balanced_VAL <- c(MODEL_NAME = "glm.fit7.balanced", 
+                           TRAINED_ON = "zbior_uczacy_balanced", 
+                           TESTED_ON = "zbior_walidacyjny",
+                           ARGS = "V1+V2+V3+V5",
+                           MSE = glm.fit7.balanced.prediction_MEAN_VALID,
+                           SPEC = glm.fit7.balanced.prediction_SPECIFICITY_VALID,
+                           SENS = glm.fit7.balanced.prediction_SENSITIVITY_VALID,
+                           TRES = 0.5)
+
+glm.fit7.balanced_TEST <- c(MODEL_NAME = "glm.fit7.balanced", 
+                            TRAINED_ON = "zbior_uczacy_balanced", 
+                            TESTED_ON = "zbior_testowy",
+                            ARGS = "V1+V2+V3+V5",
+                            MSE = glm.fit7.balanced.prediction_test_MEAN_TEST,
+                            SPEC = glm.fit7.balanced.prediction_test_SPECIFICITY_TEST,
+                            SENS = glm.fit7.balanced.prediction_test_SENSITIVITY_TEST,
+                            TRES = 0.5)
+
+glm.fit8.balanced_TEST <- c(MODEL_NAME = "glm.fit8.balanced", 
+                            TRAINED_ON = "zbior_TRENINGOWY_balanced", 
+                            TESTED_ON = "zbior_testowy",
+                            ARGS = "V1+V2+V3+V5",
+                            MSE = glm.fit8.balanced.prediction_MEAN_TEST,
+                            SPEC = glm.fit8.balanced.prediction_SPECIFICITY_TEST,
+                            SENS = glm.fit8.balanced.prediction_SENSITIVITY_TEST,
+                            TRES = 0.5)
+```
+
+```{r message=FALSE}
+df <- data.frame(dummy_predict_TEST,
+                 glm.fit3_VAL,
+                 glm.fit3_TEST,
+                 glm.fit3_TRAINING_SUBSET_TEST,
+                 glm.fit3.balanced_VAL,
+                 glm.fit3.balanced_TEST,
+                 glm.fit3.balanced_TRAINING_BALANCED_SUBSET_TEST,
+                 glm.fit7.balanced_VAL,
+                 glm.fit7.balanced_TEST,
+                 glm.fit8.balanced_TEST)
+
+df2 <- as.data.frame(t(df))
+
+names(df2)[1] <- "MODEL_NAME"
+names(df2)[2] <- "TRAINED_ON"
+names(df2)[3] <- "TESTED_ON"
+names(df2)[4] <- "ARGS"
+names(df2)[5] <- "MSE"
+names(df2)[6] <- "SPEC"
+names(df2)[7] <- "SENS"
+names(df2)[8] <- "TRES"
+```
+
+```{r message=FALSE}
+#1
+pROC_obj <- roc(zbior_testowy$V25, glm.fit3.prediction_TEST,
+                smoothed = TRUE,
+                ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+                plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,print.auc=TRUE, show.thres=TRUE, main="ROC glm.fit3.prediction_TEST", sub="TEST subset")
+
+sens.ci <- ci.se(pROC_obj)
+plot(sens.ci, type="shape", col="lightblue")
+plot(sens.ci, type="bars")
+
+#2
+pROC_obj <- roc(zbior_testowy$V25, glm.fit3.balanced.prediction_TEST,
+                smoothed = TRUE,
+                ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+                plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,print.auc=TRUE, show.thres=TRUE, main="ROC glm.fit3.balanced.prediction_TEST", sub="TEST subset")
+
+sens.ci <- ci.se(pROC_obj)
+plot(sens.ci, type="shape", col="lightblue")
+plot(sens.ci, type="bars")
+
+#3
+pROC_obj <- roc(zbior_testowy$V25, glm.fit7.balanced.prediction_test,
+                smoothed = TRUE,
+                ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+                plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,print.auc=TRUE, show.thres=TRUE, main="ROC glm.fit7.balanced.prediction_test", sub="TEST subset")
+
+sens.ci <- ci.se(pROC_obj)
+plot(sens.ci, type="shape", col="lightblue")
+plot(sens.ci, type="bars")
+
+# 4
+pROC_obj <- roc(zbior_testowy$V25, glm.fit8.balanced.prediction,
+                smoothed = TRUE,
+                ci=TRUE, ci.alpha=0.9, stratified=FALSE,
+                plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,print.auc=TRUE, show.thres=TRUE, main="ROC glm.fit8.balanced.prediction", sub="TEST subset")
+
+sens.ci <- ci.se(pROC_obj)
+plot(sens.ci, type="shape", col="lightblue")
+plot(sens.ci, type="bars")
+```
+
+```{r message=FALSE}
+df2
+```
+
+Ex 7. Draw a cost curve for bad decisions due to the treshold
+      Cost of False positive = 100
+      Cost of False negative = 1000
+      Select the optimal treshold with the minimal cost
+      Calculate the cost on the test subset
+      
+```{r message=FALSE}
+# Note - list of models:
+
+# dummy_predict
+
+# glm.fit7.balanced.prediction <- predict(glm.fit7.balanced,
+#                                         zbior_walidacyjny, 
+#                                         type="response")
+# glm.fit3.prediction <- predict(glm.fit3,
+#                                zbior_walidacyjny, 
+#                                type="response")
+# glm.fit3.balanced.prediction <- predict(glm.fit3.balanced, 
+#                                         zbior_walidacyjny, 
+#                                         type="response")
+# glm.fit8.balanced.prediction <- predict(glm.fit8.balanced, 
+#                                         zbior_testowy, 
+#                                         type="response")
+# glm.fit7.balanced.prediction_test <- predict(glm.fit7.balanced, 
+#                                              zbior_testowy, 
+#                                              type="response")
+# glm.fit3.prediction_TEST <- predict(glm.fit3, 
+#                                     zbior_testowy, 
+#                                     type="response")
+# glm.fit3.balanced.prediction_TEST <- predict(glm.fit3.balanced, 
+#                                              zbior_testowy,
+#                                              type="response")
+# glm.fit3_TRAINING_SUBSET.prediction_TEST <- predict(glm.fit3_TRAINING_SUBSET, 
+#                                                     zbior_testowy, 
+#                                                     type="response")
+# glm.fit3.balanced_TRAINING_BALANCED_SUBSET.prediction_TEST <- predict(glm.fit3.balanced_TRAINING_BALANCED_SUBSET, 
+#                                                                       zbior_testowy, 
+```
+  
+```{r message=FALSE}
+poziom_progu_odciecia <- seq(from = 0.1, to = 0.9, by = 0.01)
+
+FN_list0 <- c() # dummy
+FN_list1 <- c()
+FN_list2 <- c()
+FN_list3 <- c()
+FN_list4 <- c()
+FN_list5 <- c()
+FN_list6 <- c()
+FN_list7 <- c()
+FN_list8 <- c()
+FN_list9 <- c()
+
+FP_list0 <- c() # dummy
+FP_list1 <- c()
+FP_list2 <- c()
+FP_list3 <- c()
+FP_list4 <- c()
+FP_list5 <- c()
+FP_list6 <- c()
+FP_list7 <- c()
+FP_list8 <- c()
+FP_list9 <- c()
+
+mean_list0 <- c() # dummy
+mean_list1 <- c()
+mean_list2 <- c()
+mean_list3 <- c()
+mean_list4 <- c()
+mean_list5 <- c()
+mean_list6 <- c()
+mean_list7 <- c()
+mean_list8 <- c()
+mean_list9 <- c()
+
+sensitivity0 <- c() # dummy
+sensitivity1 <- c()
+sensitivity2 <- c()
+sensitivity3 <- c()
+sensitivity4 <- c()
+sensitivity5 <- c()
+sensitivity6 <- c()
+sensitivity7 <- c()
+sensitivity8 <- c()
+sensitivity9 <- c()
+
+specificity0 <- c() # dummy
+specificity1 <- c()
+specificity2 <- c()
+specificity3 <- c()
+specificity4 <- c()
+specificity5 <- c()
+specificity6 <- c()
+specificity7 <- c()
+specificity8 <- c()
+specificity9 <- c()
+
+for(i in poziom_progu_odciecia){
+  
+  pred0 <- ifelse(dummy_predict > i, 1, 0) # dummy
+  pred1 <- ifelse(glm.fit3.prediction > i, 1, 0)
+  pred2 <- ifelse(glm.fit3.prediction_TEST > i, 1, 0)
+  pred3 <- ifelse(glm.fit3_TRAINING_SUBSET.prediction_TEST > i, 1, 0)
+  pred4 <- ifelse(glm.fit3.balanced.prediction > i, 1, 0)
+  pred5 <- ifelse(glm.fit3.balanced.prediction_TEST > i, 1, 0)
+  pred6 <- ifelse(glm.fit3_TRAINING_SUBSET.prediction_TEST > i, 1, 0)
+  pred7 <- ifelse(glm.fit7.balanced.prediction > i, 1, 0)
+  pred8 <- ifelse(glm.fit7.balanced.prediction_test > i, 1, 0)
+  pred9 <- ifelse(glm.fit8.balanced.prediction > i, 1, 0)
+ 
+  tabela0 <- table(pred0, real=zbior_testowy$V25) # dummy
+  tabela1 <- table(pred1, real=zbior_testowy$V25)
+  tabela2 <- table(pred2, real=zbior_testowy$V25)
+  tabela3 <- table(pred3, real=zbior_testowy$V25)
+  tabela4 <- table(pred4, real=zbior_testowy$V25)
+  tabela5 <- table(pred5, real=zbior_testowy$V25)
+  tabela6 <- table(pred6, real=zbior_testowy$V25)
+  tabela7 <- table(pred7, real=zbior_testowy$V25)
+  tabela8 <- table(pred8, real=zbior_testowy$V25)
+  tabela9 <- table(pred9, real=zbior_testowy$V25)
+
+  FN0 <- c(tabela0[1,2]) # dummy
+  FN1 <- c(tabela1[1,2])
+  FN2 <- c(tabela2[1,2])
+  FN3 <- c(tabela3[1,2])
+  FN4 <- c(tabela4[1,2])
+  FN5 <- c(tabela5[1,2])
+  FN6 <- c(tabela6[1,2])
+  FN7 <- c(tabela7[1,2])
+  FN8 <- c(tabela8[1,2])
+  FN9 <- c(tabela9[1,2])
+  
+  FP0 <- c(tabela0[2,1]) # dummy
+  FP1 <- c(tabela1[2,1])
+  FP2 <- c(tabela2[2,1])
+  FP3 <- c(tabela3[2,1])
+  FP4 <- c(tabela4[2,1])
+  FP5 <- c(tabela5[2,1])
+  FP6 <- c(tabela6[2,1])
+  FP7 <- c(tabela7[2,1])
+  FP8 <- c(tabela8[2,1])
+  FP9 <- c(tabela9[2,1])
+  
+  wynik0 <- c(mean(pred0==zbior_testowy$V25)) # dummy
+  wynik1 <- c(mean(pred1==zbior_testowy$V25))
+  wynik2 <- c(mean(pred2==zbior_testowy$V25))
+  wynik3 <- c(mean(pred3==zbior_testowy$V25))
+  wynik4 <- c(mean(pred4==zbior_testowy$V25))
+  wynik5 <- c(mean(pred5==zbior_testowy$V25))
+  wynik6 <- c(mean(pred6==zbior_testowy$V25))
+  wynik7 <- c(mean(pred7==zbior_testowy$V25))
+  wynik8 <- c(mean(pred8==zbior_testowy$V25))
+  wynik9 <- c(mean(pred9==zbior_testowy$V25))
+
+  FN_list0 <- c(FN_list0, FN0) # dummy
+  FN_list1 <- c(FN_list1, FN1)
+  FN_list2 <- c(FN_list2, FN2)
+  FN_list3 <- c(FN_list3, FN3)
+  FN_list4 <- c(FN_list4, FN4)
+  FN_list5 <- c(FN_list5, FN5)
+  FN_list6 <- c(FN_list6, FN6)
+  FN_list7 <- c(FN_list7, FN7)
+  FN_list8 <- c(FN_list8, FN8)
+  FN_list9 <- c(FN_list9, FN9)
+  
+  FP_list0 <- c(FP_list0, FP0) # dummy
+  FP_list1 <- c(FP_list1, FP1)
+  FP_list2 <- c(FP_list2, FP2)
+  FP_list3 <- c(FP_list3, FP3)
+  FP_list4 <- c(FP_list4, FP4)
+  FP_list5 <- c(FP_list5, FP5)
+  FP_list6 <- c(FP_list6, FP6)
+  FP_list7 <- c(FP_list7, FP7)
+  FP_list8 <- c(FP_list8, FP8)
+  FP_list9 <- c(FP_list9, FP9)
+  
+  mean_list0 <- c(mean_list0,wynik0) # dummy
+  mean_list1 <- c(mean_list1,wynik1)
+  mean_list2 <- c(mean_list2,wynik2)
+  mean_list3 <- c(mean_list3,wynik3)
+  mean_list4 <- c(mean_list4,wynik4)
+  mean_list5 <- c(mean_list5,wynik5)
+  mean_list6 <- c(mean_list6,wynik6)
+  mean_list7 <- c(mean_list7,wynik7)
+  mean_list8 <- c(mean_list8,wynik8)
+  mean_list9 <- c(mean_list9,wynik9)
+  
+  specificity0 <- c(specificity0, tabela0[1,1]/(tabela0[1,1] + tabela0[2,1])) # dummy
+  specificity1 <- c(specificity1, tabela1[1,1]/(tabela1[1,1] + tabela1[2,1]))
+  specificity2 <- c(specificity2, tabela2[1,1]/(tabela2[1,1] + tabela2[2,1]))
+  specificity3 <- c(specificity3, tabela3[1,1]/(tabela3[1,1] + tabela3[2,1]))
+  specificity4 <- c(specificity4, tabela4[1,1]/(tabela4[1,1] + tabela4[2,1]))
+  specificity5 <- c(specificity5, tabela5[1,1]/(tabela5[1,1] + tabela5[2,1]))
+  specificity6 <- c(specificity6, tabela6[1,1]/(tabela6[1,1] + tabela6[2,1]))
+  specificity7 <- c(specificity7, tabela7[1,1]/(tabela7[1,1] + tabela7[2,1]))
+  specificity8 <- c(specificity8, tabela8[1,1]/(tabela8[1,1] + tabela8[2,1]))
+  specificity9 <- c(specificity9, tabela9[1,1]/(tabela9[1,1] + tabela9[2,1]))
+  
+  sensitivity0 <- c(sensitivity0, tabela0[2,2]/(tabela0[2,2] + tabela0[1,2])) # dummy
+  sensitivity1 <- c(sensitivity1, tabela1[2,2]/(tabela1[2,2] + tabela1[1,2]))
+  sensitivity2 <- c(sensitivity2, tabela2[2,2]/(tabela2[2,2] + tabela2[1,2]))
+  sensitivity3 <- c(sensitivity3, tabela3[2,2]/(tabela3[2,2] + tabela3[1,2]))
+  sensitivity4 <- c(sensitivity4, tabela4[2,2]/(tabela4[2,2] + tabela4[1,2]))
+  sensitivity5 <- c(sensitivity5, tabela5[2,2]/(tabela5[2,2] + tabela5[1,2]))
+  sensitivity6 <- c(sensitivity6, tabela6[2,2]/(tabela6[2,2] + tabela6[1,2]))
+  sensitivity7 <- c(sensitivity7, tabela7[2,2]/(tabela7[2,2] + tabela7[1,2]))
+  sensitivity8 <- c(sensitivity8, tabela8[2,2]/(tabela8[2,2] + tabela8[1,2]))
+  sensitivity9 <- c(sensitivity9, tabela9[2,2]/(tabela9[2,2] + tabela9[1,2]))
+}
+
+koszt_FP0 <- c() # dummy
+koszt_FP1 <- c()
+koszt_FP2 <- c()
+koszt_FP3 <- c()
+koszt_FP4 <- c()
+koszt_FP5 <- c()
+koszt_FP6 <- c()
+koszt_FP7 <- c()
+koszt_FP8 <- c()
+koszt_FP9 <- c()
+
+for(i in FP_list0){koszt_FP0 <- c(koszt_FP0, i * 150)} # dummy
+for(i in FP_list1){koszt_FP1 <- c(koszt_FP1, i * 150)}
+for(i in FP_list2){koszt_FP2 <- c(koszt_FP2, i * 150)}
+for(i in FP_list3){koszt_FP3 <- c(koszt_FP3, i * 150)}
+for(i in FP_list4){koszt_FP4 <- c(koszt_FP4, i * 150)}
+for(i in FP_list5){koszt_FP5 <- c(koszt_FP5, i * 150)}
+for(i in FP_list6){koszt_FP6 <- c(koszt_FP6, i * 150)}
+for(i in FP_list7){koszt_FP7 <- c(koszt_FP7, i * 150)}
+for(i in FP_list8){koszt_FP8 <- c(koszt_FP8, i * 150)}
+for(i in FP_list9){koszt_FP9 <- c(koszt_FP9, i * 150)}
+
+koszt_FN0 <- c() # dummy
+koszt_FN1 <- c()
+koszt_FN2 <- c()
+koszt_FN3 <- c()
+koszt_FN4 <- c()
+koszt_FN5 <- c()
+koszt_FN6 <- c()
+koszt_FN7 <- c()
+koszt_FN8 <- c()
+koszt_FN9 <- c()
+
+for(i in FN_list0){koszt_FN0 <- c(koszt_FN0, i * 1000)} # dummy
+for(i in FN_list1){koszt_FN1 <- c(koszt_FN1, i * 1000)}
+for(i in FN_list2){koszt_FN2 <- c(koszt_FN2, i * 1000)}
+for(i in FN_list3){koszt_FN3 <- c(koszt_FN3, i * 1000)}
+for(i in FN_list4){koszt_FN4 <- c(koszt_FN4, i * 1000)}
+for(i in FN_list5){koszt_FN5 <- c(koszt_FN5, i * 1000)}
+for(i in FN_list6){koszt_FN6 <- c(koszt_FN6, i * 1000)}
+for(i in FN_list7){koszt_FN7 <- c(koszt_FN7, i * 1000)}
+for(i in FN_list8){koszt_FN8 <- c(koszt_FN8, i * 1000)}
+for(i in FN_list9){koszt_FN9 <- c(koszt_FN9, i * 1000)}
+
+suma_koszt0 <- c() # dummy
+suma_koszt1 <- c()
+suma_koszt2 <- c()
+suma_koszt3 <- c()
+suma_koszt4 <- c()
+suma_koszt5 <- c()
+suma_koszt6 <- c()
+suma_koszt7 <- c()
+suma_koszt8 <- c()
+suma_koszt9 <- c()
+
+valleys0 <- c() # dummy
+valleys1 <- c()
+valleys2 <- c()
+valleys3 <- c()
+valleys4 <- c()
+valleys5 <- c()
+valleys6 <- c()
+valleys7 <- c()
+valleys8 <- c()
+valleys9 <- c()
+
+for(i in seq_along(koszt_FN0)){suma_koszt0 <- c(suma_koszt0, (koszt_FP0[i]+koszt_FN0[i]))} # dummy
+for(i in seq_along(koszt_FN1)){suma_koszt1 <- c(suma_koszt1, (koszt_FP1[i]+koszt_FN1[i]))}
+for(i in seq_along(koszt_FN2)){suma_koszt2 <- c(suma_koszt2, (koszt_FP2[i]+koszt_FN2[i]))}
+for(i in seq_along(koszt_FN3)){suma_koszt3 <- c(suma_koszt3, (koszt_FP3[i]+koszt_FN3[i]))}
+for(i in seq_along(koszt_FN4)){suma_koszt4 <- c(suma_koszt4, (koszt_FP4[i]+koszt_FN4[i]))}
+for(i in seq_along(koszt_FN5)){suma_koszt5 <- c(suma_koszt5, (koszt_FP5[i]+koszt_FN5[i]))}
+for(i in seq_along(koszt_FN6)){suma_koszt6 <- c(suma_koszt6, (koszt_FP6[i]+koszt_FN6[i]))}
+for(i in seq_along(koszt_FN7)){suma_koszt7 <- c(suma_koszt7, (koszt_FP7[i]+koszt_FN7[i]))}
+for(i in seq_along(koszt_FN8)){suma_koszt8 <- c(suma_koszt8, (koszt_FP8[i]+koszt_FN8[i]))}
+for(i in seq_along(koszt_FN9)){suma_koszt9 <- c(suma_koszt9, (koszt_FP9[i]+koszt_FN9[i]))}
+
+valleys0 <- c(valleys0, findValleys(suma_koszt0, thresh=0)) # dummy
+valleys1 <- c(valleys1, findValleys(suma_koszt1, thresh=0))
+valleys2 <- c(valleys2, findValleys(suma_koszt2, thresh=0))
+valleys3 <- c(valleys3, findValleys(suma_koszt3, thresh=0))
+valleys4 <- c(valleys4, findValleys(suma_koszt4, thresh=0))
+valleys5 <- c(valleys5, findValleys(suma_koszt5, thresh=0))
+valleys6 <- c(valleys6, findValleys(suma_koszt6, thresh=0))
+valleys7 <- c(valleys7, findValleys(suma_koszt7, thresh=0))
+valleys8 <- c(valleys8, findValleys(suma_koszt8, thresh=0))
+valleys9 <- c(valleys9, findValleys(suma_koszt9, thresh=0))
+
+### SPECIFICITY plot ###
+plot(poziom_progu_odciecia, specificity1, type='l', ylim=c(0, 1) , col = "coral4", main="SPECIFICITY", xlab="THRESHOLD", ylab="SPECIFICITY")
+lines(poziom_progu_odciecia, specificity2, type='l', col = "cyan3")
+lines(poziom_progu_odciecia, specificity3, type='l', col = "cyan4")
+lines(poziom_progu_odciecia, specificity4, type='l', col = "mediumvioletred")
+lines(poziom_progu_odciecia, specificity5, type='l', col = "mediumorchid")
+lines(poziom_progu_odciecia, specificity6, type='l', col = "mediumorchid4")
+lines(poziom_progu_odciecia, specificity7, type='l', col = "springgreen2")
+lines(poziom_progu_odciecia, specificity8, type='l', col = "springgreen4")
+lines(poziom_progu_odciecia, specificity9, type='l', col = "yellowgreen")
+lines(poziom_progu_odciecia, specificity0, type='l', col = "red") ### dummy
+legend(x="bottomright", legend=c("glm.fit3.prediction (1)", "glm.fit3.prediction_TEST (2)", "glm.fit3_TRAINING_SUBSET.prediction_TEST (3)", "glm.fit3.balanced.prediction (4)", "glm.fit3.balanced.prediction_TEST (5)", "glm.fit3_TRAINING_SUBSET.prediction_TEST (6)", "glm.fit7.balanced.prediction (7)", "glm.fit7.balanced.prediction_test (8)", "glm.fit8.balanced.prediction (9)","DUMMY (D)"), col=c("cyan", "cyan3", "cyan4","mediumvioletred","mediumorchid","mediumorchid4","springgreen2","springgreen4","yellowgreen","red"), lty=c(1,1), cex=0.7, text.font=4, bg='azure')
+
+### SENSITIVITY plot ###
+plot(poziom_progu_odciecia, sensitivity1, type='l', xlim=c(0, 1.5), ylim=c(0, 1), col = "coral4", main="SENSITIVITY", xlab="THRESHOLD", ylab="SENSITIVITY")
+lines(poziom_progu_odciecia, sensitivity2, type='l', col = "cyan3")
+lines(poziom_progu_odciecia, sensitivity3, type='l', col = "cyan4")
+lines(poziom_progu_odciecia, sensitivity4, type='l', col = "mediumvioletred")
+lines(poziom_progu_odciecia, sensitivity5, type='l', col = "mediumorchid")
+lines(poziom_progu_odciecia, sensitivity6, type='l', col = "mediumorchid4")
+lines(poziom_progu_odciecia, sensitivity7, type='l', col = "springgreen2")
+lines(poziom_progu_odciecia, sensitivity8, type='l', col = "springgreen4")
+lines(poziom_progu_odciecia, sensitivity9, type='l', col = "yellowgreen")
+lines(poziom_progu_odciecia, sensitivity0, type='l', col = "red") ### dummy
+legend(x="topright", legend=c("glm.fit3.prediction (1)", "glm.fit3.prediction_TEST (2)", "glm.fit3_TRAINING_SUBSET.prediction_TEST (3)", "glm.fit3.balanced.prediction (4)", "glm.fit3.balanced.prediction_TEST (5)", "glm.fit3_TRAINING_SUBSET.prediction_TEST (6)", "glm.fit7.balanced.prediction (7)", "glm.fit7.balanced.prediction_test (8)", "glm.fit8.balanced.prediction (9)", "DUMMY (D)"), col=c("cyan", "cyan3", "cyan4","mediumvioletred","mediumorchid","mediumorchid4","springgreen2","springgreen4","yellowgreen","red"), lty=c(1,1), cex=0.7, text.font=4, bg='azure')
+
+### MSE plot ###
+plot(poziom_progu_odciecia, mean_list1, ylim=c(0.3, 0.82), type='l', col = "coral4", main="MSE", xlab="THRESHOLD", ylab="MSE")
+lines(poziom_progu_odciecia, mean_list2, type='l', col = "cyan3")
+lines(poziom_progu_odciecia, mean_list3, type='l', col = "cyan4")
+lines(poziom_progu_odciecia, mean_list4, type='l', col = "mediumvioletred")
+lines(poziom_progu_odciecia, mean_list5, type='l', col = "mediumorchid")
+lines(poziom_progu_odciecia, mean_list6, type='l', col = "mediumorchid4")
+lines(poziom_progu_odciecia, mean_list7, type='l', col = "springgreen2")
+lines(poziom_progu_odciecia, mean_list8, type='l', col = "springgreen4")
+lines(poziom_progu_odciecia, mean_list9, type='l', col = "yellowgreen")
+lines(poziom_progu_odciecia, mean_list0, type='l', col = "red") ### dummy
+points(x = poziom_progu_odciecia[match(max(mean_list1),mean_list1)], y = max(mean_list1), pch = 16, col = "brown1")
+text(x = poziom_progu_odciecia[match(max(mean_list1),mean_list1)], y = max(mean_list1), labels="1", cex= 0.7, pos=3)
+points(x = poziom_progu_odciecia[match(max(mean_list2),mean_list2)], y = max(mean_list2), pch = 16, col = "brown1")
+text(x = poziom_progu_odciecia[match(max(mean_list2),mean_list2)], y = max(mean_list2), labels="2", cex= 0.7, pos=3)
+points(x = poziom_progu_odciecia[match(max(mean_list3),mean_list3)], y = max(mean_list3), pch = 16, col = "brown1")
+text(x = poziom_progu_odciecia[match(max(mean_list3),mean_list3)], y = max(mean_list3), labels="3", cex= 0.7, pos=3)
+points(x = poziom_progu_odciecia[match(max(mean_list4),mean_list4)], y = max(mean_list4), pch = 16, col = "brown1")
+text(x = poziom_progu_odciecia[match(max(mean_list4),mean_list4)], y = max(mean_list4), labels="4", cex= 0.7, pos=3)
+points(x = poziom_progu_odciecia[match(max(mean_list5),mean_list5)], y = max(mean_list5), pch = 16, col = "brown1")
+text(x = poziom_progu_odciecia[match(max(mean_list5),mean_list5)], y = max(mean_list5), labels="5", cex= 0.7, pos=3)
+points(x = poziom_progu_odciecia[match(max(mean_list6),mean_list6)], y = max(mean_list6), pch = 16, col = "brown1")
+text(x = poziom_progu_odciecia[match(max(mean_list6),mean_list6)], y = max(mean_list6), labels="6", cex= 0.7, pos=3)
+points(x = poziom_progu_odciecia[match(max(mean_list7),mean_list7)], y = max(mean_list7), pch = 16, col = "brown1")
+text(x = poziom_progu_odciecia[match(max(mean_list7),mean_list7)], y = max(mean_list7), labels="7", cex= 0.7, pos=3)
+points(x = poziom_progu_odciecia[match(max(mean_list8),mean_list8)], y = max(mean_list8), pch = 16, col = "brown1")
+text(x = poziom_progu_odciecia[match(max(mean_list8),mean_list8)], y = max(mean_list8), labels="8", cex= 0.7, pos=3)
+points(x = poziom_progu_odciecia[match(max(mean_list9),mean_list9)], y = max(mean_list9), pch = 16, col = "brown1")
+text(x = poziom_progu_odciecia[match(max(mean_list9),mean_list9)], y = max(mean_list9), labels="9", cex= 0.7, pos=3)
+points(x = poziom_progu_odciecia[match(max(mean_list0),mean_list0)], y = max(mean_list0), pch = 16, col = "red") ### dummy
+text(x = poziom_progu_odciecia[match(max(mean_list0),mean_list0)], y = max(mean_list0), labels="D", cex= 0.7, pos=3) ### dummy
+legend(x="bottomright", legend=c("glm.fit3.prediction (1)", "glm.fit3.prediction_TEST (2)", "glm.fit3_TRAINING_SUBSET.prediction_TEST (3)", "glm.fit3.balanced.prediction (4)", "glm.fit3.balanced.prediction_TEST (5)", "glm.fit3_TRAINING_SUBSET.prediction_TEST (6)", "glm.fit7.balanced.prediction (7)", "glm.fit7.balanced.prediction_test (8)", "glm.fit8.balanced.prediction (9)","DUMMY (D)"), col=c("cyan", "cyan3", "cyan4","mediumvioletred","mediumorchid","mediumorchid4","springgreen2","springgreen4","yellowgreen","red"), lty=c(1,1), cex=0.7, text.font=4, bg='azure')
+
+### TOTAL COST plot ###
+plot(poziom_progu_odciecia, suma_koszt1, xlim=c(0.1, 1.5), ylim=c(20000, 100000), type='l', col = "coral4", main="TOTAL COST", xlab="THRESHOLD", ylab="COST")
+lines(poziom_progu_odciecia, suma_koszt2, type='l', col = "cyan3")
+lines(poziom_progu_odciecia, suma_koszt3, type='l', col = "cyan4")
+lines(poziom_progu_odciecia, suma_koszt4, type='l', col = "mediumvioletred")
+lines(poziom_progu_odciecia, suma_koszt5, type='l', col = "mediumorchid")
+lines(poziom_progu_odciecia, suma_koszt6, type='l', col = "mediumorchid4")
+lines(poziom_progu_odciecia, suma_koszt7, type='l', col = "springgreen2")
+lines(poziom_progu_odciecia, suma_koszt8, type='l', col = "springgreen4")
+lines(poziom_progu_odciecia, suma_koszt9, type='l', col = "yellowgreen")
+lines(poziom_progu_odciecia, suma_koszt0, type='l', col = "red") ### dummy
+for(i in valleys1){points(x = poziom_progu_odciecia[i-1], y = suma_koszt1[i-1], pch = 16, col = "coral4")}
+for(i in valleys2){points(x = poziom_progu_odciecia[i-1], y = suma_koszt2[i-1], pch = 16, col = "cyan3")}
+for(i in valleys3){points(x = poziom_progu_odciecia[i-1], y = suma_koszt3[i-1], pch = 16, col = "cyan4")}
+for(i in valleys4){points(x = poziom_progu_odciecia[i-1], y = suma_koszt4[i-1], pch = 16, col = "mediumvioletred")}
+for(i in valleys5){points(x = poziom_progu_odciecia[i-1], y = suma_koszt5[i-1], pch = 16, col = "mediumorchid")}
+for(i in valleys6){points(x = poziom_progu_odciecia[i-1], y = suma_koszt6[i-1], pch = 16, col = "mediumorchid4")}
+for(i in valleys7){points(x = poziom_progu_odciecia[i-1], y = suma_koszt7[i-1], pch = 16, col = "springgreen2")}
+for(i in valleys8){points(x = poziom_progu_odciecia[i-1], y = suma_koszt8[i-1], pch = 16, col = "springgreen4")}
+for(i in valleys9){points(x = poziom_progu_odciecia[i-1], y = suma_koszt9[i-1], pch = 16, col = "yellowgreen")}
+for(i in valleys0){points(x = poziom_progu_odciecia[i-1], y = suma_koszt0[i-1], pch = 16, col = "red")} # dummy
+legend(x="bottomright", legend=c("glm.fit3.prediction (1)", "glm.fit3.prediction_TEST (2)", "glm.fit3_TRAINING_SUBSET.prediction_TEST (3)", "glm.fit3.balanced.prediction (4)", "glm.fit3.balanced.prediction_TEST (5)", "glm.fit3_TRAINING_SUBSET.prediction_TEST (6)", "glm.fit7.balanced.prediction (7)", "glm.fit7.balanced.prediction_test (8)", "glm.fit8.balanced.prediction (9)", "DUMMY (D)"), col=c("cyan", "cyan3", "cyan4","mediumvioletred","mediumorchid","mediumorchid4","springgreen2","springgreen4","yellowgreen","red"), lty=c(1,1), cex=0.7, text.font=4, bg='azure')
+```
+
+```{r message=FALSE}
+v0 <- NULL
+v1 <- NULL
+v2 <- NULL
+v3 <- NULL
+v4 <- NULL
+v5 <- NULL
+v6 <- NULL
+v7 <- NULL
+v8 <- NULL
+v9 <- NULL
+
+for(i in valleys0){v0 <- rbind(v0, data.frame(threshold=poziom_progu_odciecia[i-1],cost=suma_koszt0[i-1]))}
+for(i in valleys1){v1 <- rbind(v1, data.frame(threshold=poziom_progu_odciecia[i-1],cost=suma_koszt1[i-1]))}
+for(i in valleys2){v2 <- rbind(v2, data.frame(threshold=poziom_progu_odciecia[i-1],cost=suma_koszt2[i-1]))}
+for(i in valleys3){v3 <- rbind(v3, data.frame(threshold=poziom_progu_odciecia[i-1],cost=suma_koszt3[i-1]))}
+for(i in valleys4){v4 <- rbind(v4, data.frame(threshold=poziom_progu_odciecia[i-1],cost=suma_koszt4[i-1]))}
+for(i in valleys5){v5 <- rbind(v5, data.frame(threshold=poziom_progu_odciecia[i-1],cost=suma_koszt5[i-1]))}
+for(i in valleys6){v6 <- rbind(v6, data.frame(threshold=poziom_progu_odciecia[i-1],cost=suma_koszt6[i-1]))}
+for(i in valleys7){v7 <- rbind(v7, data.frame(threshold=poziom_progu_odciecia[i-1],cost=suma_koszt7[i-1]))}
+for(i in valleys8){v8 <- rbind(v8, data.frame(threshold=poziom_progu_odciecia[i-1],cost=suma_koszt8[i-1]))}
+for(i in valleys9){v9 <- rbind(v9, data.frame(threshold=poziom_progu_odciecia[i-1],cost=suma_koszt9[i-1]))}
+```
+
+```{r message=FALSE}
+DT::datatable(v0)
+DT::datatable(v1)
+DT::datatable(v2)
+DT::datatable(v3)
+DT::datatable(v4)
+DT::datatable(v5)
+DT::datatable(v6)
+DT::datatable(v7)
+DT::datatable(v8)
+DT::datatable(v9)
+```
+
+```{r message=FALSE}
+min_cost_df <- rbind(model_D = v0[which.min(v0$cost),],
+                     model11 = v1[which.min(v1$cost),],
+                     model12 = v2[which.min(v2$cost),],
+                     model13 = v3[which.min(v3$cost),],
+                     model21 = v4[which.min(v4$cost),],
+                     model22 = v5[which.min(v5$cost),],
+                     model23 = v6[which.min(v6$cost),],
+                     model31 = v7[which.min(v7$cost),],
+                     model32 = v8[which.min(v8$cost),],
+                     model33 = v9[which.min(v9$cost),])
+```
+
+```{r message=FALSE}
+min_cost_df
+```
+
+------------------------------------------------------------------------------------------------
+more about theory:  https://towardsdatascience.com/understanding-the-roc-and-auc-curves-a05b68550b69
+
+#TO DO:
+0. full description
+1. cross valid
+2. add missed AUC
+3. LDA, QDA tests
+4. simplify var names
