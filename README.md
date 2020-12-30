@@ -1,7 +1,10 @@
 # sandbox
 
+### Projekt na zaliczenie cwiczen, easy customer clustering
 
-### investigation based on GLM method
+`projekt_cwiczenia_customer_clustering_python`
+
+### GLM method
 
 `praca_zal_1_v5.Rmd`
 
@@ -19,14 +22,15 @@ Zaprezentuj zdolność predykcyjną obu modeli na zbiorze uczącym i walidacyjny
 Na osobnym wykresie zaprezentuj zdolność predykcyjną na zbiorze walidacyjnym i testowym najlepszego modelu wykresem ROC i wyznacz wartości statystyki AUC.
 Narysuj krzywą kosztów złych decyzji w zależności od poziomu progu odcięcia na przedziale od 0,5 do 0,9 z krokiem 0,01 dla najlepszego modelu na zbiorze walidacyjnym. Przyjmij koszt złych decyzji (False Positive oraz False Negative) na poziomie odpowiednio 150 i 1000 PLN. Wskaż optymalny próg odcięcia, dla którego koszty złych decyzji będą najniższe. Policz koszty złych decyzji dla najlepszego modelu i ustalonego progu odcięgia na zbiorze testującym.
 
-
-
 ### Materialy wykorzystane podczas seminarium MLSG 5 listopada 2019
+
+`wyklad MLSG.pdf`
+`std_l2_dpt_reg.ipynb`
 
 **Tematy:**
 - Uniwersalny przepływ roboczy uczenia maszynowego
 - Nadmierne i zbyt slabe dopasowanie modeli
 
 **Zawartość:** 
-- slajdy do prezentacji `wyklad MLSG.pdf`
-- wykresy strat trenowania i walidacji `std_l2_dpt_reg.ipynb`
+- slajdy do prezentacji
+- wykresy strat trenowania i walidacji 
